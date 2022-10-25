@@ -67,7 +67,7 @@ namespace grafa2
                             if (localText.Contains('#')) break;
                             if (String.IsNullOrEmpty(localText)) continue;
 
-                            if (counter < 4)
+                            if (counter < bpp)
                             {
 
                                 switch (counter)
@@ -169,7 +169,7 @@ namespace grafa2
                         if (localText.Contains('#')) break;
                         if (String.IsNullOrEmpty(localText)) continue;
 
-                        if (counter < 4)
+                        if (counter < bpp)
                         {
                             counter++;
                             continue;
@@ -220,10 +220,11 @@ namespace grafa2
             finally { DeleteObject(handle); }
         }
 
+        private const int bpp = 4;
+
         public static Bitmap PassValues(Bitmap bmp, byte[] values)
         {
-
-            for (int y = 0; y < height; y++)
+           /* for (int y = 0; y < height; y++)
                 for (int x = 0; x < width; x++)
                 {
                     if (y * bmp.Width * 3 + x * 3 > values.Length - 3)
@@ -233,28 +234,60 @@ namespace grafa2
                         values[y * bmp.Width * 3 + x * 3 + 1],
                         values[y * bmp.Width * 3 + x * 3 + 2]);
                     bmp.SetPixel(x, y, color);
-                }
-            /*BitmapData data = bmp.LockBits(new System.Drawing.Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb
+                }*/
+            BitmapData data = bmp.LockBits(
+                new System.Drawing.Rectangle(System.Drawing.Point.Empty, bmp.Size), 
+                ImageLockMode.ReadWrite, 
+                System.Drawing.Imaging.PixelFormat.Format32bppArgb
             );
-            byte[] vs = new byte[data.Stride * data.Height];
+            byte[] vs = new byte[data.Width * MainWindow.bpp * data.Height];
             Marshal.Copy(data.Scan0, vs, 0, vs.Length);
 
-
             for (int y = 0; y < data.Height; y++)
-                for (int x = 0; x < data.Width;x++)
+                for (int x = 0; x < data.Width; x++)
                 {
-                    if (y * bmp.Width * 3 + x * 3 > values.Length-3)
-                        continue;
-                    //vs[y * bmp.Width * 3 + x * 4 + 3] = 255;
-                    vs[y * bmp.Width * 3 + x * 3 + 2] = (byte)(values[y * bmp.Width * 3 + x * 3 + 0]);
-                    vs[y * bmp.Width * 3 + x * 3 + 0] = (byte)(values[y * bmp.Width * 3 + x * 3 + 1]);
-                    vs[y * bmp.Width * 3 + x * 3 + 1] = (byte)(values[y * bmp.Width * 3 + x * 3 + 2]);
-
+                    /*if (y * bmp.Width * 3 + x * 3 > values.Length - 3)
+                        continue;*/
+                    vs[y * bmp.Width * bpp + x * bpp + 3] = 255;
+                    vs[y * bmp.Width * bpp + x * bpp + 2] = (byte)(values[y * bmp.Width * 3 + x * 3 + 0]);
+                    vs[y * bmp.Width * bpp + x * bpp + 0] = (byte)(values[y * bmp.Width * 3 + x * 3 + 1]);
+                    vs[y * bmp.Width * bpp + x * bpp + 1] = (byte)(values[y * bmp.Width * 3 + x * 3 + 2]);
                 }
 
             Marshal.Copy(vs, 0, data.Scan0, vs.Length);
-            bmp.UnlockBits(data);*/
+            bmp.UnlockBits(data);
             return bmp;
+        }
+        public static Bitmap ConvertToBitmap(BitmapSource bitmapSource)
+        {
+            var width = bitmapSource.PixelWidth;
+            var height = bitmapSource.PixelHeight;
+            var stride = width * ((bitmapSource.Format.BitsPerPixel + 7) / 8);
+            var memoryBlockPointer = Marshal.AllocHGlobal(height * stride);
+            bitmapSource.CopyPixels(new Int32Rect(0, 0, width, height), memoryBlockPointer, height * stride, stride);
+            var bitmap = new Bitmap(width, height, stride, System.Drawing.Imaging.PixelFormat.Format32bppPArgb, memoryBlockPointer);
+            return bitmap;
+        }
+        private void SaveFile(object sender, RoutedEventArgs e)
+        {
+
+            SaveFileDialog saveFileDialog = new SaveFileDialog();
+            saveFileDialog.Filter = "Images|*.png;*.bmp;*.jpg";
+            ImageFormat format = ImageFormat.Png;
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                string ext = System.IO.Path.GetExtension(saveFileDialog.FileName);
+                switch (ext)
+                {
+                    case ".jpg":
+                        format = ImageFormat.Jpeg;
+                        break;
+                    case ".png":
+                        format = ImageFormat.Png;
+                        break;
+                }
+                ConvertToBitmap((BitmapSource)Img.Source).Save(saveFileDialog.FileName, format);
+            }
         }
     }
 }
