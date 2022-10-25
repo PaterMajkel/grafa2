@@ -32,9 +32,9 @@ namespace grafa2
             InitializeComponent();
         }
 
-        string type = "";
-        int? width = null;
-        int? height = null;
+        static string type = "";
+        static int? width = null;
+        static int? height = null;
         int? highest = null;
         string fileName;
         int binaryCounter = 0;
@@ -51,15 +51,18 @@ namespace grafa2
                 {
                     int counter = 0;
                     binaryCounter = 0;
-
+                    int lineCounter = 0;
                     string ln;
                     values = new();
                     while ((ln = file.ReadLine()) != null)
                     {
                         var splitLine = Regex.Split(ln, @"\s+").Where(s => s != string.Empty).ToArray();
                         binaryCounter += splitLine.Length;
+                        var localCounter = 0;
+                        lineCounter++;
                         foreach (var text in splitLine)
                         {
+                            localCounter++;
                             var localText = text.Trim();
                             if (localText.Contains('#')) break;
                             if (String.IsNullOrEmpty(localText)) continue;
@@ -83,41 +86,49 @@ namespace grafa2
                                         break;
                                 }
                                 counter++;
-                                continue;
                             }
+
+                            if (highest != null)
+                                binaryCounter -= splitLine.Length - localCounter + lineCounter;
 
                             
 
                         }
+                        if (counter > 3)
+                            break;
                     }
                     file.Close();
-                   
+
                 }
 
                 if (int.Parse(type[^1].ToString()) > 3)
                 {
                     ReadBinaryFile(fileName);
-                    
+
                 }
                 else
                     ReadNormalFile(fileName);
 
-                var format = type switch
-                {
-                    "P1" => System.Drawing.Imaging.PixelFormat.Format1bppIndexed,
-                    "P2" => System.Drawing.Imaging.PixelFormat.Format8bppIndexed,
-                    "P3" => System.Drawing.Imaging.PixelFormat.Format24bppRgb,
-                    "P4" => System.Drawing.Imaging.PixelFormat.Format1bppIndexed,
-                    "P5" => System.Drawing.Imaging.PixelFormat.Format8bppIndexed,
-                    "P6" => System.Drawing.Imaging.PixelFormat.Format24bppRgb,
-                };
-                var bitmap = new Bitmap((int)width, (int)height, format);
+               
+                var bitmap = new Bitmap((int)width, (int)height, System.Drawing.Imaging.PixelFormat.Format32bppRgb);
                 var bytes = Array.ConvertAll<int, byte>(values.ToArray(), Convert.ToByte);
 
                 bitmap = PassValues(bitmap, bytes);
                 Img.Source = ImageSourceFromBitmap(bitmap);
             }
         }
+
+
+        // A B C
+        // D E F
+        //
+
+        // A B C 0
+        // D E F 0
+        // 1. Change the RawFormat from BMP to i.e. PNG
+        // 2. Handle the bytes padding
+
+
 
         public void ReadBinaryFile(string fileName)
         {
@@ -133,13 +144,13 @@ namespace grafa2
                 hex = string.Format("{0:X2}", hexIn);
 
                 var val = this.NormalizeBinary(hex);
-               /* if (val == 35)
-                    continue;*/
+                 /*if (val == 35)
+                     continue;*/
                 values.Add(val);
             }
 
             fs.Close();
-            
+
         }
 
         public void ReadNormalFile(string fileName)
@@ -178,7 +189,7 @@ namespace grafa2
             var value = int.Parse(text);
             if (highest != 255)
             {
-                return value * 255 / (int)highest;
+                return value * 255 / highest!.Value;
             }
             return value;
         }
@@ -188,7 +199,7 @@ namespace grafa2
             var value = int.Parse(text, System.Globalization.NumberStyles.HexNumber);
             if (highest != 255)
             {
-                return value * 255 / (int)highest;
+                return value * 255 / highest!.Value;
             }
             return value;
         }
@@ -203,6 +214,7 @@ namespace grafa2
             var handle = bmp.GetHbitmap();
             try
             {
+                
                 return Imaging.CreateBitmapSourceFromHBitmap(handle, IntPtr.Zero, Int32Rect.Empty, BitmapSizeOptions.FromWidthAndHeight(bmp.Width, bmp.Height));
             }
             finally { DeleteObject(handle); }
@@ -211,17 +223,37 @@ namespace grafa2
         public static Bitmap PassValues(Bitmap bmp, byte[] values)
         {
 
-            BitmapData data = bmp.LockBits(new System.Drawing.Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadWrite, bmp.PixelFormat);
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    if (y * bmp.Width * 3 + x * 3 > values.Length - 3)
+                        continue;
+                    var color = System.Drawing.Color.FromArgb(255,
+                        values[y * bmp.Width * 3 + x * 3 + 0],
+                        values[y * bmp.Width * 3 + x * 3 + 1],
+                        values[y * bmp.Width * 3 + x * 3 + 2]);
+                    bmp.SetPixel(x, y, color);
+                }
+            /*BitmapData data = bmp.LockBits(new System.Drawing.Rectangle(0, 0, bmp.Width, bmp.Height), ImageLockMode.ReadWrite, System.Drawing.Imaging.PixelFormat.Format32bppArgb
+            );
             byte[] vs = new byte[data.Stride * data.Height];
             Marshal.Copy(data.Scan0, vs, 0, vs.Length);
 
 
-            for (int i = 0; i < data.Height; i++)
-                for (int y = 0; y < data.Width; y++)
-                    vs[i * bmp.Width + y] = (byte)(values[i * bmp.Width + y]);
+            for (int y = 0; y < data.Height; y++)
+                for (int x = 0; x < data.Width;x++)
+                {
+                    if (y * bmp.Width * 3 + x * 3 > values.Length-3)
+                        continue;
+                    //vs[y * bmp.Width * 3 + x * 4 + 3] = 255;
+                    vs[y * bmp.Width * 3 + x * 3 + 2] = (byte)(values[y * bmp.Width * 3 + x * 3 + 0]);
+                    vs[y * bmp.Width * 3 + x * 3 + 0] = (byte)(values[y * bmp.Width * 3 + x * 3 + 1]);
+                    vs[y * bmp.Width * 3 + x * 3 + 1] = (byte)(values[y * bmp.Width * 3 + x * 3 + 2]);
+
+                }
 
             Marshal.Copy(vs, 0, data.Scan0, vs.Length);
-            bmp.UnlockBits(data);
+            bmp.UnlockBits(data);*/
             return bmp;
         }
     }
